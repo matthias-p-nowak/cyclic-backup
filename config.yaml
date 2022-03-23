@@ -1,0 +1,14 @@
+---
+backup:
+- /tmp/2bk
+db: cycbackup.db
+exclude:
+- /tt/
+- /\\.git/
+- /\\.settings/
+- /\\.idea/
+- /\\.bak$/
+flag: .bkstop
+min_age: 10
+size: 200M
+# target: /tmp/backup.tar
