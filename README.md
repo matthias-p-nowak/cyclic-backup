@@ -37,7 +37,7 @@ which item to back up and what to skip
         * in case it does not exist, it will be removed from the database
         * if it is excluded or too recent, it will be removed from the database
         * if it exists, it will be backed up
-* it finishes
+* it finishes with
     * writing statistics to the log file
     
 ## Configuration
@@ -58,7 +58,15 @@ size: 10M
 # target: /tmp/backup.tar
 ~~~
 
-Commands:
-* tar -cv -C / --no-recursion -T -
-* xz
-* gpg --symmetric --batch --cipher-algo AES256 --passphrase hello <t.out >t.enc
+## Restore
+
+~~~
+#!/bin/bash
+PP="topsecret"
+exec 2>&1
+for F in $*
+do
+  echo "### showing ${F}"
+  unxz <$F | gpg -d --passphrase "${PP}" --batch | tar tvf -
+done
+~~~
