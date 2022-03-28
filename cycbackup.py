@@ -12,8 +12,7 @@ import stat
 import sys
 import tarfile
 import time
-from tarfile import TarFile
-from typing import Union, Any
+import traceback
 
 import jinja2
 import yaml
@@ -105,12 +104,30 @@ def archive(fullname, inc):
     :param inc: apply rules for incremental backup
     """
     global exclude, counts, config, blocked, file_size, db_conn, vol_num
-    stat_buf = os.lstat(fullname)
     for item in blocked:
         if fullname.startswith(item):
             counts['blocked'] += 1
             # logging.debug(f"blocked: {fullname}")
             return
+    path=fullname
+    while True:
+        path,tail =os.path.split(path)
+        if len(path)<=1:
+            break
+        try:
+            if os.lstat(os.path.join(path, config['flag'])):
+                logging.debug("found flag in path")
+                return
+        except FileNotFoundError as fnfe:
+            pass
+    try:
+        stat_buf = os.lstat(fullname)
+    except Exception as ex:
+        logging.error(f"lstat({fullname}): {ex}")
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        for l in traceback.format_exception(exc_type, exc_value, exc_traceback):
+            logging.warning(f"  {l.strip()}")
+        return
     if stat.S_ISDIR(stat_buf.st_mode):
         ext_filename = fullname + '/'
     else:
@@ -124,7 +141,7 @@ def archive(fullname, inc):
         return
     if stat_buf.st_dev != start_device:
         counts['device'] += 1
-        # logging.debug(f"device: {fullname}")
+        logging.debug(f"device: {fullname}")
         return
     # sockets are created by running programs
     if stat.S_ISSOCK(stat_buf.st_mode):
@@ -147,7 +164,7 @@ def archive(fullname, inc):
         counts['permissions'] += 1
         logging.debug(f"permissions: {fullname}")
         return
-    nfs = file_size + 512 + stat_buf.st_size
+    nfs = file_size + 1536 + stat_buf.st_size
     if nfs >= target_size:
         counts['too_big'] += 1
         # logging.debug(f"too big: {fullname}")
@@ -158,11 +175,14 @@ def archive(fullname, inc):
     else:
         counts['cyclic'] += 1
         # logging.debug(f"cyclic: {fullname}")
-    file_size = nfs
-    tar_file.add(fullname, recursive=False)
-    db_conn.execute('replace into files(name,mtime,volume) values(?,?,?)',
-                    (fullname, mtime, vol_num))
-    db_conn.commit()
+    try:
+        tar_file.add(fullname, recursive=False)
+        db_conn.execute('replace into files(name,mtime,volume) values(?,?,?)',
+                        (fullname, mtime, vol_num))
+        db_conn.commit()
+        file_size=tar_file.fileobj.tell()
+    except Exception as ex:
+        logging.error(f"tar archive {ex}")
     counts['backed_up'] += 1
 
 
@@ -257,6 +277,7 @@ def main():
     templ = jinja2.Template(resultT)
     result_txt = templ.render(counts)
     logging.debug(result_txt)
+    print(result_txt)
 
 
 if __name__ == '__main__':
@@ -267,5 +288,6 @@ if __name__ == '__main__':
         main()
     except Exception as ex:
         logging.error(f"main exception {ex}")
+        traceback.print_exc()
     finally:
         print("all done")

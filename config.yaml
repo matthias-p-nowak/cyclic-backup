@@ -4,11 +4,12 @@ backup:
 db: cycbackup.db
 exclude:
 - /tt/
-- /\\.git/
-- /\\.settings/
-- /\\.idea/
-- /\\.bak$/
+- /\.git/
+- /\.settings/
+- /\.idea/
+- /\.bak$/
+- /\.cache/
 flag: .bkstop
 min_age: 10
-size: 200M
+size: 20M
 # target: /tmp/backup.tar
