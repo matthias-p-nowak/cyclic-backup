@@ -282,7 +282,7 @@ def main():
             db_conn.commit()
             cyclic()
             db_conn.commit()
-        for row in db_conn.execute('select b.num,b.tarfile, count(f.name) from backup as b left join'
+        for row in db_conn.execute('select b.num,b.date, count(f.name) from backup as b left join'
                                    + ' files as f on b.num=f.volume group by b.num'):
             if int(row[2]) == 0:
                 msg=f"tarfile {row[1]} from backup {row[0]} can be deleted"
