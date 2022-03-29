@@ -91,6 +91,8 @@ def prep_database():
             db_conn.execute(stmt)
         db_conn.commit()
         logging.debug("upgraded from scratch")
+    db_conn.execute('pragma journal_mode=wal')
+    db_conn.execute('pragma synchronous=normal')
     row = db_conn.execute('select max(volume) from files').fetchone()
     if row is not None and row[0] is not None:
         vol_num = row[0] + 1
@@ -277,7 +279,18 @@ def main():
         db_conn.commit()
         with tarfile.open(config['target'], 'w:') as tar_file:
             incremental()
+            db_conn.commit()
             cyclic()
+            db_conn.commit()
+        for row in db_conn.execute('select b.num,b.tarfile, count(f.name) from backup as b left join'
+                                   + ' files as f on b.num=f.volume group by b.num'):
+            if int(row[2]) == 0:
+                msg=f"tarfile {row[1]} from backup {row[0]} can be deleted"
+                logging.info(msg)
+                print(msg)
+                db_conn.execute('delete from backup where num=?', (row[0],))
+                db_conn.commit()
+
     templ = jinja2.Template(resultT)
     result_txt = templ.render(counts)
     logging.debug(result_txt)
