@@ -117,6 +117,7 @@ def archive(fullname, inc):
         try:
             if os.lstat(os.path.join(path, config['flag'])):
                 logging.debug("found flag in path")
+                blocked.add(path)
                 return
         except FileNotFoundError as fnfe:
             pass
