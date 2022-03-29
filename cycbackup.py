@@ -13,6 +13,7 @@ import sys
 import tarfile
 import time
 import traceback
+from builtins import bool
 
 import jinja2
 import yaml
@@ -64,6 +65,7 @@ skipped 2 recent:{{ "%7d" | format(too_recent) }}
 """
 """ template for the results """
 
+
 def prep_database():
     """
     prepares the database, creates it if not exists
@@ -99,7 +101,7 @@ def prep_database():
     logging.debug(f"the current volume is {vol_num}")
 
 
-def archive(fullname, inc):
+def archive(fullname, inc) -> bool:
     """
     archives one file if conditions are met
     :param fullname: full name of the file
@@ -110,17 +112,17 @@ def archive(fullname, inc):
         if fullname.startswith(item):
             counts['blocked'] += 1
             # logging.debug(f"blocked: {fullname}")
-            return
-    path=fullname
+            return False
+    path = fullname
     while True:
-        path,tail =os.path.split(path)
-        if len(path)<=1:
+        path, tail = os.path.split(path)
+        if len(path) <= 1:
             break
         try:
             if os.lstat(os.path.join(path, config['flag'])):
                 logging.debug("found flag in path")
                 blocked.add(path)
-                return
+                return False
         except FileNotFoundError as fnfe:
             pass
     try:
@@ -130,7 +132,7 @@ def archive(fullname, inc):
         exc_type, exc_value, exc_traceback = sys.exc_info()
         for l in traceback.format_exception(exc_type, exc_value, exc_traceback):
             logging.warning(f"  {l.strip()}")
-        return
+        return False
     if stat.S_ISDIR(stat_buf.st_mode):
         ext_filename = fullname + '/'
     else:
@@ -139,21 +141,21 @@ def archive(fullname, inc):
         if pt.search(ext_filename) is not None:
             counts['excluded'] += 1
             # logging.debug(f"excluded: {fullname}")
-            return
+            return False
     if fullname == config['db']:
-        return
+        return False
     if stat_buf.st_dev != start_device:
         counts['device'] += 1
         logging.debug(f"device: {fullname}")
-        return
+        return False
     # sockets are created by running programs
     if stat.S_ISSOCK(stat_buf.st_mode):
-        return
+        return False
     mtime = int(stat_buf.st_mtime)
     if mtime > max_age:
         counts['too_recent'] += 1
         logging.debug(f"too recent: {fullname}")
-        return
+        return False
     # checking age against database
     if inc:
         row = db_conn.execute('select mtime from files where name=?', (fullname,)).fetchone()
@@ -161,17 +163,17 @@ def archive(fullname, inc):
             if row[0] == mtime:
                 counts['same_old'] += 1
                 # logging.debug(f"same old: {fullname}")
-                return
+                return False
     if not os.access(fullname, os.R_OK):
         logging.warning('missing permissions: ' + fullname)
         counts['permissions'] += 1
         logging.debug(f"permissions: {fullname}")
-        return
+        return False
     nfs = file_size + 1536 + stat_buf.st_size
     if nfs >= target_size:
         counts['too_big'] += 1
         # logging.debug(f"too big: {fullname}")
-        return
+        return False
     if inc:
         counts['incremental'] += 1
         # logging.debug(f"incremental: {fullname}")
@@ -180,13 +182,14 @@ def archive(fullname, inc):
         # logging.debug(f"cyclic: {fullname}")
     try:
         tar_file.add(fullname, recursive=False)
+        counts['backed_up'] += 1
         db_conn.execute('replace into files(name,mtime,volume) values(?,?,?)',
                         (fullname, mtime, vol_num))
         db_conn.commit()
-        file_size=tar_file.fileobj.tell()
+        file_size = tar_file.fileobj.tell()
     except Exception as ex:
         logging.error(f"tar archive {ex}")
-    counts['backed_up'] += 1
+    return True
 
 
 def incremental():
@@ -226,7 +229,9 @@ def cyclic():
         row = rs.fetchone()
         if row is None:
             return
-        archive(row[0],False)
+        if not archive(row[0], False):
+            db_conn.execute('delete from files where name=?',(row[0],))
+            db_conn.commit()
         if file_size + 8096 > target_size:
             return
 
@@ -285,7 +290,7 @@ def main():
         for row in db_conn.execute('select b.num,b.date, count(f.name) from backup as b left join'
                                    + ' files as f on b.num=f.volume group by b.num'):
             if int(row[2]) == 0:
-                msg=f"tarfile {row[1]} from backup {row[0]} can be deleted"
+                msg = f"tarfile {row[1]} from backup {row[0]} can be deleted"
                 logging.info(msg)
                 print(msg)
                 db_conn.execute('delete from backup where num=?', (row[0],))
