@@ -193,22 +193,25 @@ def incremental():
     """
     global config, blocked, start_device
     for entry in config['backup']:
-        stat_buf = os.lstat(entry)
-        start_device = stat_buf.st_dev
-        for path, dirs, files in os.walk(entry):
-            for item in files:
-                if item == config['flag']:
-                    blocked.add(path)
-                    continue
-                fullname = os.path.join(path, item)
-                archive(fullname, True)
-                if file_size + 8096 > target_size:
-                    return
-            for item in dirs:
-                fullname = os.path.join(path, item)
-                archive(fullname, True)
-                if file_size + 8096 > target_size:
-                    return
+        try:
+            stat_buf = os.lstat(entry)
+            start_device = stat_buf.st_dev
+            for path, dirs, files in os.walk(entry):
+                for item in files:
+                    if item == config['flag']:
+                        blocked.add(path)
+                        continue
+                    fullname = os.path.join(path, item)
+                    archive(fullname, True)
+                    if file_size + 8096 > target_size:
+                        return
+                for item in dirs:
+                    fullname = os.path.join(path, item)
+                    archive(fullname, True)
+                    if file_size + 8096 > target_size:
+                        return
+        except FileNotFoundError as fnfe:
+            logging.error(f"backup entry {entry} not found:\n {fnfe}")
 
 
 def cyclic():
