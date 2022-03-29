@@ -290,7 +290,6 @@ def main():
                 print(msg)
                 db_conn.execute('delete from backup where num=?', (row[0],))
                 db_conn.commit()
-
     templ = jinja2.Template(resultT)
     result_txt = templ.render(counts)
     logging.debug(result_txt)
